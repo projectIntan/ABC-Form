@@ -1,0 +1,6 @@
+{
+  "name": "Anti Bribery & Corruption Declaration",
+  "description": "Enterprise Anti Bribery and Corruption Declaration Portal for Radiant Group with dynamic forms, HRIS mock, approval workflow, and reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
