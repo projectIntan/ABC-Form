@@ -39,11 +39,18 @@ startPythonBackend();
 app.all("/api/*", async (req, res) => {
   const targetUrl = `http://127.0.0.1:${PYTHON_PORT}${req.originalUrl}`;
   try {
+    const forwardHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (req.headers.authorization) {
+      forwardHeaders["Authorization"] = req.headers.authorization as string;
+    }
+    if (req.headers["x-auth-token"]) {
+      forwardHeaders["x-auth-token"] = req.headers["x-auth-token"] as string;
+    }
     const fetchOptions: RequestInit = {
       method: req.method,
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: forwardHeaders,
     };
 
     if (["POST", "PUT", "PATCH"].includes(req.method) && Object.keys(req.body || {}).length > 0) {

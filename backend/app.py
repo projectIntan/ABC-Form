@@ -93,8 +93,11 @@ class HRISApiHandler(BaseHTTPRequestHandler):
             statement = db.get_compliance_statement()
             return self._send_json_response(200, {"status": "success", "data": statement})
 
-        # 9. Get Declarations
+        # 9. Get Declarations (Protected: Compliance/Approver/Admin)
         if path == "/api/declarations":
+            token = self._extract_token()
+            if not token or not db.verify_token(token):
+                return self._send_json_response(401, {"status": "error", "message": "Authentication required to view declarations monitoring"})
             declarations = db.get_all_declarations()
             return self._send_json_response(200, {"status": "success", "data": declarations})
 

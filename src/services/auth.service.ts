@@ -19,8 +19,7 @@ export class AuthService {
     } catch {
       // ignore
     }
-    // Default to Employee (John Doe) if not logged in
-    return MOCK_USERS[0];
+    return null;
   }
 
   static async verifySession(): Promise<User | null> {

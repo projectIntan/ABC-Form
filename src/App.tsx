@@ -21,13 +21,17 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <Routes>
+            {/* 1. Public Declaration Form (Root / & /declarations/create) - Unauthenticated */}
+            <Route path="/" element={<CreateDeclaration isPublicRoot={true} />} />
+            <Route path="/declarations/create" element={<CreateDeclaration isPublicRoot={false} />} />
+
+            {/* 2. Compliance / Monitoring Login - Authenticated Entry */}
             <Route path="/login" element={<Login />} />
 
+            {/* 3. Protected Compliance & Monitoring Routes */}
             <Route element={<Layout />}>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/declarations" element={<MyDeclarations />} />
-              <Route path="/declarations/create" element={<CreateDeclaration />} />
               <Route path="/declarations/:id" element={<DeclarationDetail />} />
               <Route path="/approvals" element={<Approval />} />
               <Route path="/reports" element={<Reports />} />
@@ -35,7 +39,8 @@ export default function App() {
               <Route path="/audit-trail" element={<AuditTrail />} />
             </Route>
 
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            {/* Fallback to Public Declaration Form */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AuthProvider>
       </ToastProvider>
