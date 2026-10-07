@@ -95,6 +95,8 @@ export const Dashboard: React.FC = () => {
 
         <Link
           to="/declarations/create"
+          state={{ fresh: Date.now() }}
+          onClick={() => window.dispatchEvent(new CustomEvent("reset-declaration-form"))}
           className="px-5 py-2.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white font-medium text-sm shadow-xs transition-colors flex items-center justify-center gap-2 shrink-0"
         >
           <PlusCircle className="w-5 h-5" />
@@ -253,9 +255,11 @@ export const Dashboard: React.FC = () => {
             action={
               <Link
                 to="/declarations/create"
+                state={{ fresh: Date.now() }}
+                onClick={() => window.dispatchEvent(new CustomEvent("reset-declaration-form"))}
                 className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs rounded-lg transition-colors"
               >
-                + Create Declaration
+                + Buat Deklarasi Baru
               </Link>
             }
           />

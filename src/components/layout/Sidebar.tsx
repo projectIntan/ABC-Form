@@ -66,7 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       roles: ["EMPLOYEE", "APPROVER", "ADMIN"],
     },
     {
-      label: "+ Create Declaration",
+      label: "+ Buat Deklarasi Baru",
       path: "/declarations/create",
       icon: PlusCircle,
       isPrimary: true,
@@ -154,7 +154,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                   <Link
                     key={item.path}
                     to={item.path}
-                    onClick={onClose}
+                    state={{ fresh: Date.now() }}
+                    onClick={() => {
+                      onClose();
+                      window.dispatchEvent(new CustomEvent("reset-declaration-form"));
+                    }}
                     className="mt-2 mb-3 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-sky-500 text-white font-medium hover:bg-sky-600 transition-colors text-sm shadow-xs"
                   >
                     <Icon className="w-4 h-4" />

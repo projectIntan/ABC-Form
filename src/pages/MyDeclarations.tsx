@@ -110,10 +110,12 @@ export const MyDeclarations: React.FC = () => {
 
         <Link
           to="/declarations/create"
+          state={{ fresh: Date.now() }}
+          onClick={() => window.dispatchEvent(new CustomEvent("reset-declaration-form"))}
           className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-bold text-xs shadow-md hover:brightness-110 transition-all flex items-center justify-center gap-2 shrink-0"
         >
           <PlusCircle className="w-4 h-4" />
-          <span>+ Create Declaration</span>
+          <span>+ Buat Deklarasi Baru</span>
         </Link>
       </div>
 
@@ -192,9 +194,11 @@ export const MyDeclarations: React.FC = () => {
           action={
             <Link
               to="/declarations/create"
+              state={{ fresh: Date.now() }}
+              onClick={() => window.dispatchEvent(new CustomEvent("reset-declaration-form"))}
               className="px-4 py-2 bg-slate-900 text-white font-bold text-xs rounded-xl hover:bg-slate-800"
             >
-              + Create Declaration
+              + Buat Deklarasi Baru
             </Link>
           }
         />
