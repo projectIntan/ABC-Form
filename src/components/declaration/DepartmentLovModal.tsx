@@ -11,6 +11,7 @@ interface DepartmentLovModalProps {
   onSelect: (dept: DepartmentItem) => void;
   selectedSbuName: string;
   selectedDepartmentName?: string;
+  items?: DepartmentItem[];
 }
 
 export const DepartmentLovModal: React.FC<DepartmentLovModalProps> = ({
@@ -19,16 +20,17 @@ export const DepartmentLovModal: React.FC<DepartmentLovModalProps> = ({
   onSelect,
   selectedSbuName,
   selectedDepartmentName,
+  items = DEPARTMENT_MASTER_LIST,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
 
   // Filter department items strictly by the selected SBU
   const sbuDepartments = useMemo(() => {
     if (!selectedSbuName) return [];
-    return DEPARTMENT_MASTER_LIST.filter(
+    return items.filter(
       (item) => item.sbuName === selectedSbuName
     );
-  }, [selectedSbuName]);
+  }, [selectedSbuName, items]);
 
   const filteredList = useMemo(() => {
     if (!searchTerm.trim()) return sbuDepartments;

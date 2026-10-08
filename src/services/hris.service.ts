@@ -1,4 +1,5 @@
 import { Employee, OrganizationNode, User } from "../types";
+import { DepartmentItem, SbuItem } from "../constants/activityTypes";
 import { MOCK_EMPLOYEES } from "../mocks/employees";
 import { MOCK_ORGANIZATIONS } from "../mocks/organizations";
 import { MOCK_USERS } from "../mocks/users";
@@ -40,7 +41,7 @@ export class HRISService {
     return emp || MOCK_EMPLOYEES[0];
   }
 
-  static async getAllEmployees(): Promise<Employee[]> {
+  static async getAllEmployees(useFallback = true): Promise<Employee[]> {
     try {
       const res = await fetch("/api/hris/employees");
       if (res.ok) {
@@ -70,7 +71,7 @@ export class HRISService {
     }
 
     await simulatedDelay(150);
-    return MOCK_EMPLOYEES;
+    return useFallback ? MOCK_EMPLOYEES : [];
   }
 
   static async getAllUserAccounts(): Promise<User[]> {
@@ -161,9 +162,26 @@ export class HRISService {
     );
   }
 
+  static async getCostControlEmployees(sbu: string): Promise<Employee[]> {
+    const employees = await this.getAllEmployees(false);
+    const selectedSbu = sbu.trim().toLowerCase();
+    return employees.filter((employee) =>
+      employee.isActive &&
+      employee.positionName.trim().toUpperCase() === "PCC" &&
+      employee.sbuName.trim().toLowerCase() === selectedSbu
+    );
+  }
+
   static async getOrganizations(): Promise<OrganizationNode[]> {
-    await simulatedDelay(100);
-    return MOCK_ORGANIZATIONS;
+    const structure = await this.getHrisStructure();
+    return Object.entries(structure.structure || {}).map(([name, value]: [string, any]) => ({ id: name, name, code: value.code || name, children: [] }));
+  }
+
+  static async getOrganizationOptions(): Promise<{ sbus: SbuItem[]; departments: DepartmentItem[] }> {
+    const response = await fetch("/api/hris/structure");
+    const json = await response.json();
+    if (!response.ok || json.status !== "success") throw new Error(json.message || "Gagal memuat organisasi.");
+    return { sbus: Array.isArray(json.sbus) ? json.sbus : [], departments: Array.isArray(json.departments) ? json.departments : [] };
   }
 
   static async getHrisStructure(): Promise<any> {

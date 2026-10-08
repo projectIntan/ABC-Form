@@ -227,6 +227,11 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
     if (updatedIdentity.activityType !== identity.activityType) {
       setActivityDetail({}); // Reset detail on activity type switch
     }
+    if (updatedIdentity.sbu !== identity.sbu) {
+      setExternalParty((prev) => ({ ...prev, projectCode: "", projectCodeId: "", costControlEmployeeId: "", costControlName: "", costControlEmail: "" }));
+    } else if (updatedIdentity.department !== identity.department) {
+      setExternalParty((prev) => ({ ...prev, projectCode: "", projectCodeId: "" }));
+    }
     setIdentity(updatedIdentity);
     if (errors.activityType) setErrors((prev) => ({ ...prev, activityType: "" }));
   };
@@ -250,6 +255,14 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
         errs.employeeId = "Employee ID / NIK belum terisi.";
       if (!identity.activityType)
         errs.activityType = "Silakan pilih jenis kegiatan.";
+    }
+
+    const routingStep = (isInternal && (stepNumber === 2 || stepNumber === 3)) || (!isInternal && (stepNumber === 3 || stepNumber === 4));
+    if (routingStep) {
+      if (!externalParty.projectCode?.trim()) errs.projectCode = "Project Code wajib dipilih.";
+      if (!externalParty.costControlEmployeeId) errs.costControl = "Cost Control wajib dipilih.";
+      if (!externalParty.costControlEmail) errs.costControlEmail = "Email Cost Control wajib tersedia.";
+      if (!attachments.length) errs.attachments = "Dokumen wajib diupload sebelum Submit.";
     }
 
     // Step 2 for Non-Internal: External Party Validation
@@ -497,8 +510,6 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
 
   // If Submission Succeeded Screen
   if (submittedResult) {
-    const isGift = submittedResult.identity.activityType === "GIFT";
-
     return (
       <div className="min-h-screen bg-[#f8fafc] text-slate-800 p-4 sm:p-8 flex items-center justify-center">
         <div className="max-w-2xl w-full mx-auto space-y-6 animate-fadeIn">
@@ -512,12 +523,10 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
                 Document Code: F-COMP-001-01
               </span>
               <h1 className="text-2xl font-bold text-slate-900">
-                {isGift ? "Deklarasi Hadiah Terkirim" : "Deklarasi Berhasil Dicatat (Approved)"}
+                Deklarasi Berhasil Dikirim
               </h1>
               <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                {isGift
-                  ? "Deklarasi Anda telah berhasil disimpan di sistem Kepatuhan Radiant Group dan diteruskan ke Tim Compliance / Reviewer untuk diverifikasi."
-                  : "Deklarasi Anda telah berhasil dicatat dan disetujui otomatis. Nomor deklarasi resmi di bawah ini dapat digunakan sebagai referensi reimbursement."}
+                Deklarasi Anda telah berhasil disimpan dan diteruskan ke Tim Compliance / Reviewer untuk diverifikasi.
               </p>
             </div>
 
@@ -546,11 +555,7 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
                   <span className="inline-block mt-0.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[11px]">
                     SUBMITTED (Menunggu Verifikasi)
                   </span>
-                ) : (
-                  <span className="inline-block mt-0.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px]">
-                    APPROVED (Disetujui Otomatis)
-                  </span>
-                )}
+                ) : null}
               </div>
               <div>
                 <span className="text-slate-400 font-bold block text-[10px] uppercase">
@@ -770,6 +775,12 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
             <Step3ActivityDetail
               activityType={identity.activityType}
               data={activityDetail}
+              identity={identity}
+              externalParty={externalParty}
+              onExternalPartyChange={(updated) => {
+                setExternalParty(updated);
+                setErrors((prev) => ({ ...prev, projectCode: "", costControl: "", costControlEmail: "" }));
+              }}
               onChange={(updated) => {
                 setActivityDetail(updated);
                 setErrors({});

@@ -181,27 +181,32 @@ export class DeclarationService {
     }
   ): Promise<Declaration> {
     await simulatedDelay(350);
+    const backendResponse = await fetch("/api/declarations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...data, status: "SUBMITTED" }),
+    });
+    if (!backendResponse.ok) {
+      const result = await backendResponse.json().catch(() => ({}));
+      throw new Error(result.message || "Validasi backend gagal.");
+    }
     const list = this.getStoredDeclarations();
     const now = new Date().toISOString();
 
-    const isGift = data.identity.activityType === "GIFT";
-    const status: DeclarationStatus = isGift ? "SUBMITTED" : "APPROVED";
-    const dateCode = new Date().toISOString().slice(0, 7).replace("-", "");
+    const status: DeclarationStatus = "SUBMITTED";
 
     if (data.id) {
       const idx = list.findIndex((d) => d.id === data.id);
       if (idx !== -1) {
         const sequence = idx + 1;
-        const autoExpNo = status === "APPROVED" ? `EXP-${dateCode}-${String(sequence).padStart(4, "0")}` : undefined;
-
         const updated: Declaration = {
           ...list[idx],
           ...data,
           status,
-          expenseNumber: list[idx].expenseNumber || autoExpNo,
+          expenseNumber: list[idx].expenseNumber,
           submittedDate: now,
-          reviewedDate: isGift ? undefined : now,
-          reviewedBy: isGift ? undefined : "Sistem (Otomatis / Tanpa Verifikasi Khusus)",
+          reviewedDate: undefined,
+          reviewedBy: undefined,
           declarationAccepted: true,
         };
         list[idx] = updated;
@@ -211,11 +216,9 @@ export class DeclarationService {
           employeeId: data.identity.employeeId,
           user: data.identity.fullName,
           module: "Declaration",
-          action: isGift ? "SUBMIT" : "SUBMIT_AUTO_APPROVED",
+          action: "SUBMIT",
           recordId: updated.declarationNumber,
-          description: isGift
-            ? `Submitted declaration ${updated.declarationNumber} (Requires Gift Approval)`
-            : `Submitted declaration ${updated.declarationNumber} (Auto-Approved / Generated ERP Expense: ${updated.expenseNumber})`,
+          description: `Submitted declaration ${updated.declarationNumber} (Requires Approval)`,
         });
 
         return updated;
@@ -226,18 +229,16 @@ export class DeclarationService {
     const sequence = list.length + 1;
     const branchCode = getBranchCodeFromEntity(data.identity.entity);
     const declNo = generateDeclarationNumber(sequence, branchCode);
-    const autoExpNo = status === "APPROVED" ? `EXP-${dateCode}-${String(sequence).padStart(4, "0")}` : undefined;
-
     const newDecl: Declaration = {
       ...data,
       id: `DECL-${Date.now()}`,
       declarationNumber: declNo,
-      expenseNumber: autoExpNo,
+      expenseNumber: undefined,
       status,
       createdDate: now,
       submittedDate: now,
-      reviewedDate: isGift ? undefined : now,
-      reviewedBy: isGift ? undefined : "Sistem (Otomatis / Tanpa Verifikasi Khusus)",
+      reviewedDate: undefined,
+      reviewedBy: undefined,
       documentCode: "F-COMP-001-01",
       declarationAccepted: true,
     };
@@ -260,11 +261,9 @@ export class DeclarationService {
       employeeId: data.identity.employeeId,
       user: data.identity.fullName,
       module: "Declaration",
-      action: isGift ? "SUBMIT" : "SUBMIT_AUTO_APPROVED",
+      action: "SUBMIT",
       recordId: newDecl.declarationNumber,
-      description: isGift
-        ? `Submitted declaration ${newDecl.declarationNumber} (Requires Gift Approval)`
-        : `Submitted declaration ${newDecl.declarationNumber} (Auto-Approved / No Approval Required)`,
+      description: `Submitted declaration ${newDecl.declarationNumber} (Requires Approval)`,
     });
 
     return newDecl;

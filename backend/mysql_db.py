@@ -5,11 +5,17 @@ import hashlib
 import uuid
 import datetime
 import logging
+import ssl
+import urllib.parse
+import urllib.request
+from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("HRIS_Database")
 
 DB_FILE = os.path.join(os.path.dirname(__file__), "radiant_abc.db")
+PUBLIC_EMPLOYEE_API = "https://mps-test.appsradiant.com:8001/api/public/erp/employees"
+PUBLIC_ORGANIZATION_API = "https://mps-test.appsradiant.com:8001/api/public/organization-departments"
 
 class HRISDatabaseManager:
     """
@@ -17,14 +23,101 @@ class HRISDatabaseManager:
     Handles user authentication, session token management, and HRIS master records.
     """
     def __init__(self):
-        self.use_mysql = False
+        self._load_dotenv()
         self.mysql_host = os.getenv("MYSQL_HOST")
         self.mysql_user = os.getenv("MYSQL_USER", "root")
         self.mysql_password = os.getenv("MYSQL_PASSWORD", "")
         self.mysql_db = os.getenv("MYSQL_DATABASE", "radiant_abc_db")
         self.mysql_port = int(os.getenv("MYSQL_PORT", 3306))
-
         self.init_database()
+
+        self.integration_db_host = os.getenv("INTEGRATION_DB_HOST")
+        self.integration_db_user = os.getenv("INTEGRATION_DB_USER")
+        self.integration_db_password = os.getenv("INTEGRATION_DB_PASSWORD", "")
+        self.integration_db_name = os.getenv("INTEGRATION_DB_NAME")
+        self.integration_db_port = int(os.getenv("INTEGRATION_DB_PORT", 3306))
+
+    @staticmethod
+    def _load_dotenv():
+        env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+        load_dotenv(dotenv_path=env_path, override=False)
+
+    @staticmethod
+    def _public_json(url, params=None):
+        target = url
+        if params:
+            target = f"{url}?{urllib.parse.urlencode(params)}"
+        request = urllib.request.Request(target, headers={"Accept": "application/json"})
+        context = ssl.create_default_context()
+        with urllib.request.urlopen(request, timeout=15, context=context) as response:
+            if response.status < 200 or response.status >= 300:
+                raise RuntimeError(f"Public API returned HTTP {response.status}")
+            return json.loads(response.read().decode("utf-8"))
+
+    @staticmethod
+    def _records(payload):
+        if isinstance(payload, list):
+            return payload
+        if not isinstance(payload, dict):
+            return []
+        for key in ("data", "results", "items", "employees", "records"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return value
+            if isinstance(value, dict):
+                nested = HRISDatabaseManager._records(value)
+                if nested:
+                    return nested
+        return []
+
+    @staticmethod
+    def _first(data, *keys):
+        for key in keys:
+            value = data.get(key)
+            if value is not None and str(value).strip() != "":
+                return value
+        return ""
+
+    def _map_public_employee(self, raw):
+        return {
+            "id": self._first(raw, "id", "employee_id", "employeeId", "nik", "employee_number", "employeeNumber"),
+            "employee_number": self._first(raw, "employee_number", "employeeNumber", "employee_code", "employeeCode", "nik", "id"),
+            "full_name": self._first(raw, "full_name", "fullName", "employee_name", "employeeName", "name"),
+            "email": self._first(raw, "email", "email_address", "emailAddress"),
+            "position_id": self._first(raw, "position_id", "positionId", "jabatan_id", "jabatanId"),
+            "position_name": self._first(raw, "position_name", "positionName", "position", "jabatan", "job_title", "jobTitle"),
+            "entity_code": self._first(raw, "entity_code", "entityCode", "company_code", "companyCode"),
+            "entity_name": self._first(raw, "entity_name", "entityName", "company", "company_name", "companyName"),
+            "department": self._first(raw, "department", "department_name", "departmentName", "dept_name", "deptName"),
+            "organization_name": self._first(raw, "sbu", "sbu_name", "sbuName", "organization_name", "organizationName", "division", "division_name"),
+            "status": self._first(raw, "status", "employee_status", "employeeStatus") or "ACTIVE",
+        }
+
+    def get_public_employees(self, query=None, entity=None):
+        payload = self._public_json(PUBLIC_EMPLOYEE_API)
+        employees = [self._map_public_employee(item) for item in self._records(payload) if isinstance(item, dict)]
+        if query:
+            q = query.strip().lower()
+            employees = [e for e in employees if q in " ".join(str(e.get(k, "")) for k in ("id", "employee_number", "full_name", "email", "position_name", "department", "organization_name")).lower()]
+        if entity:
+            employees = [e for e in employees if e.get("entity_name", "").strip().lower() == entity.strip().lower()]
+        return employees
+
+    def get_public_structure(self):
+        payload = self._public_json(PUBLIC_ORGANIZATION_API)
+        records = self._records(payload)
+        sbus = {}
+        departments = {}
+        for raw in records:
+            if not isinstance(raw, dict):
+                continue
+            sbu = self._first(raw, "sbu", "sbu_name", "sbuName", "organization_name", "organizationName", "division", "division_name")
+            department = self._first(raw, "department", "department_name", "departmentName", "dept_name", "deptName")
+            if not sbu or not department:
+                continue
+            sbus[sbu] = {"code": self._first(raw, "sbu_code", "sbuCode", "organization_code", "organizationCode") or sbu, "name": sbu, "description": self._first(raw, "sbu_description", "description", "division_description")}
+            departments[department] = {"code": self._first(raw, "department_code", "departmentCode", "dept_code", "deptCode") or department, "name": department, "sbuName": sbu}
+        return {"status": "success", "sbus": list(sbus.values()), "departments": list(departments.values()), "structure": payload.get("structure", payload) if isinstance(payload, dict) else payload}
 
     def hash_password(self, password: str) -> str:
         """Returns SHA-256 hashed password string."""
@@ -426,6 +519,103 @@ class HRISDatabaseManager:
         conn.close()
         return dict(row) if row else None
 
+    def get_project_codes(self, department):
+        """
+        Get Project Code from Integration Database.
+
+        Source:
+            Integration DB -> v_costcode_all
+
+        Filter:
+            Department
+
+        This method is READ ONLY.
+        """
+
+        if not department or not department.strip():
+            return []
+
+        conn = None
+        cursor = None
+
+        try:
+            import mysql.connector
+
+            conn = mysql.connector.connect(
+                host=self.integration_db_host,
+                port=self.integration_db_port,
+                user=self.integration_db_user,
+                password=self.integration_db_password,
+                database=self.integration_db_name
+            )
+
+            cursor = conn.cursor(dictionary=True)
+
+            sql = """
+                SELECT
+                    project_code,
+                    project_name,
+                    department
+                FROM v_costcode_all
+                WHERE department = %s
+                ORDER BY project_code
+            """
+
+            cursor.execute(sql, (department.strip(),))
+
+            rows = cursor.fetchall()
+
+            return [
+                {
+                    "id": row.get("project_code"),
+                    "code": row.get("project_code"),
+                    "name": row.get("project_name"),
+                    "department": row.get("department")
+                }
+                for row in rows
+            ]
+
+        except Exception:
+            logger.exception(
+                "Failed to get Project Code from Integration Database"
+            )
+            raise Exception(
+                "Gagal mengambil Project Code dari Integration Database."
+            )
+
+        finally:
+            if cursor:
+                cursor.close()
+
+            if conn:
+                conn.close()
+
+    def validate_declaration_references(self, decl_data):
+        identity = decl_data.get("identity") or {}
+        external = decl_data.get("externalParty") or {}
+        department = (identity.get("department") or "").strip()
+        if not department:
+            return "Department wajib dipilih."
+        if not external.get("projectCode"):
+            return "Project Code wajib dipilih."
+        if not any(item.get("code") == external.get("projectCode") for item in self.get_project_codes(department)):
+            return "Project Code tidak valid untuk Department yang dipilih."
+        if not external.get("costControlEmployeeId"):
+            return "Cost Control wajib dipilih."
+        if not decl_data.get("attachments"):
+            return "Dokumen wajib diupload sebelum Submit."
+        employee = next((item for item in self.get_public_employees() if str(item.get("id")) == str(external["costControlEmployeeId"]) or str(item.get("employee_number")) == str(external["costControlEmployeeId"])), None)
+        if not employee:
+            return "Employee Cost Control tidak valid."
+        employee_sbu = employee.get("organization_name") or employee.get("sbu_name")
+        if (employee_sbu or "").strip().lower() != (identity.get("sbu") or "").strip().lower():
+            return "Employee Cost Control tidak berasal dari SBU yang dipilih."
+        if (employee.get("position_name") or "").strip().upper() != "PCC":
+            return "Employee Cost Control harus memiliki posisi PCC."
+        if (employee.get("email") or "").strip().lower() != (external.get("costControlEmail") or "").strip().lower():
+            return "Email Cost Control tidak sesuai dengan data employee."
+        return None
+
     # --- Master Project Codes Catalog ---
     PROJECT_CODES = [
         # SBU Energy & Offshore Services - DEPT-EOS-01 Operations & Field Management
@@ -477,7 +667,7 @@ class HRISDatabaseManager:
         {"code": "PRJ-QAC-002", "name": "Third-Party Welding Inspector QA Verification Services", "description": "Verifikasi mutu pengelasan dan inspeksi pihak ketiga independen", "departmentCode": "DEPT-INC-02", "departmentName": "Quality Assurance & Certification", "sbuName": "SBU Inspection & Certification"},
     ]
 
-    def get_project_codes(self, department_id=None, department_name=None, sbu=None, query=None):
+    def get_legacy_project_codes(self, department_id=None, department_name=None, sbu=None, query=None):
         items = list(self.PROJECT_CODES)
         dept = (department_id or department_name or "").strip().lower()
         if dept:

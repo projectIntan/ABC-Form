@@ -49,7 +49,19 @@ export interface ExternalPartyInfo {
   companyName: string;
   relationship: string;
   projectCode: string;
+  projectCodeId?: string;
+  costControlEmployeeId?: string;
+  costControlName?: string;
+  costControlEmail?: string;
   activityCategory: string;
+}
+
+export interface ProjectCode {
+  id: string;
+  code: string;
+  name?: string;
+  department: string;
+  sbu?: string;
 }
 
 export interface RadiantEmployeeParticipant {

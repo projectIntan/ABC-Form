@@ -20,6 +20,7 @@ import { HRISService } from "../../services/hris.service";
 import { SbuLovModal } from "./SbuLovModal";
 import { DepartmentLovModal } from "./DepartmentLovModal";
 import { EmployeeLovModal } from "./EmployeeLovModal";
+import { DepartmentItem, SbuItem } from "../../constants/activityTypes";
 
 interface Step1IdentityProps {
   data: DeclarationIdentity;
@@ -35,6 +36,8 @@ export const Step1Identity: React.FC<Step1IdentityProps> = ({
 }) => {
   const [employeeOptions, setEmployeeOptions] = useState<Employee[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [sbuOptions, setSbuOptions] = useState<SbuItem[]>([]);
+  const [departmentOptions, setDepartmentOptions] = useState<DepartmentItem[]>([]);
 
   // Modal states for LOV tables
   const [isSbuModalOpen, setIsSbuModalOpen] = useState(false);
@@ -44,6 +47,18 @@ export const Step1Identity: React.FC<Step1IdentityProps> = ({
   // Validation / warning toasts
   const [showSbuRequiredToast, setShowSbuRequiredToast] = useState(false);
   const [showEntityRequiredToast, setShowEntityRequiredToast] = useState(false);
+
+  useEffect(() => {
+    HRISService.getOrganizationOptions()
+      .then(({ sbus, departments }) => {
+        setSbuOptions(sbus);
+        setDepartmentOptions(departments);
+      })
+      .catch(() => {
+        setSbuOptions([]);
+        setDepartmentOptions([]);
+      });
+  }, []);
 
   // Load employees whenever selected Entity changes
   useEffect(() => {
@@ -461,6 +476,7 @@ export const Step1Identity: React.FC<Step1IdentityProps> = ({
         onClose={() => setIsSbuModalOpen(false)}
         onSelect={(sbuItem) => handleSbuChange(sbuItem.name)}
         selectedSbuName={data.sbu}
+        items={sbuOptions}
       />
 
       <DepartmentLovModal
@@ -469,6 +485,7 @@ export const Step1Identity: React.FC<Step1IdentityProps> = ({
         onSelect={(deptItem) => handleDepartmentChange(deptItem.name)}
         selectedSbuName={data.sbu || ""}
         selectedDepartmentName={data.department}
+        items={departmentOptions}
       />
 
       <EmployeeLovModal

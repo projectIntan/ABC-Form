@@ -7,6 +7,7 @@ interface SbuLovModalProps {
   onClose: () => void;
   onSelect: (sbu: SbuItem) => void;
   selectedSbuName?: string;
+  items?: SbuItem[];
 }
 
 export const SbuLovModal: React.FC<SbuLovModalProps> = ({
@@ -14,19 +15,20 @@ export const SbuLovModal: React.FC<SbuLovModalProps> = ({
   onClose,
   onSelect,
   selectedSbuName,
+  items = SBU_MASTER_LIST,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredList = useMemo(() => {
-    if (!searchTerm.trim()) return SBU_MASTER_LIST;
+    if (!searchTerm.trim()) return items;
     const term = searchTerm.toLowerCase();
-    return SBU_MASTER_LIST.filter(
+    return items.filter(
       (item) =>
         item.code.toLowerCase().includes(term) ||
         item.name.toLowerCase().includes(term) ||
         item.description.toLowerCase().includes(term)
     );
-  }, [searchTerm]);
+  }, [searchTerm, items]);
 
   if (!isOpen) return null;
 

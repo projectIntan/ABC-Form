@@ -54,12 +54,12 @@ class HRISApiHandler(BaseHTTPRequestHandler):
         if path == "/api/hris/employees":
             search_query = query_params.get("q", [None])[0] or query_params.get("query", [None])[0]
             entity_query = query_params.get("entity", [None])[0]
-            employees = db.get_all_employees(query=search_query, entity=entity_query)
-            return self._send_json_response(200, {
-                "status": "success",
-                "count": len(employees),
-                "data": employees
-            })
+            try:
+                employees = db.get_public_employees(query=search_query, entity=entity_query)
+                return self._send_json_response(200, {"status": "success", "count": len(employees), "data": employees})
+            except Exception as error:
+                logger.error("Public Employee API unavailable: %s", error)
+                return self._send_json_response(502, {"status": "error", "message": "Gagal mengambil data Employee dari Public API."})
 
         # 3. Get Single Employee Profile by ID/NIK
         if path.startswith("/api/hris/employee/"):
@@ -71,30 +71,50 @@ class HRISApiHandler(BaseHTTPRequestHandler):
 
         # 4. Get HRIS Organizational Structure
         if path == "/api/hris/structure":
-            structure_data = db.get_hris_structure()
-            return self._send_json_response(200, structure_data)
+            try:
+                return self._send_json_response(200, db.get_public_structure())
+            except Exception as error:
+                logger.error("Public Organization API unavailable: %s", error)
+                return self._send_json_response(502, {"status": "error", "message": "Gagal mengambil data organisasi dari Public API."})
 
-        # 5. Get HRIS Sync Logs
+         # 5. Get Project Codes by Department
+        if path == "/api/master/project-codes":
+            department = query_params.get("department", [""])[0]
+
+            if not department.strip():
+                return self._send_json_response(
+                    400,
+                    {"status": "error", "message": "Department wajib dipilih"}
+                )
+
+            try:
+                project_codes = db.get_project_codes(department)
+                return self._send_json_response(200, {"status": "success", "data": project_codes})
+            except Exception as error:
+                logger.exception("Failed to load Project Code from Integration Database: %s", error)
+                return self._send_json_response(502, {"status": "error", "message": "Gagal mengambil Project Code dari Integration Database."})
+
+        # 6. Get HRIS Sync Logs
         if path == "/api/hris/sync/logs":
             logs = db.get_sync_logs()
             return self._send_json_response(200, {"status": "success", "data": logs})
 
-        # 6. Get Master Activity Types (Jenis Kegiatan)
+        # 7. Get Master Activity Types (Jenis Kegiatan)
         if path == "/api/master/activity-types":
             act_types = db.get_all_activity_types()
             return self._send_json_response(200, {"status": "success", "data": act_types})
 
-        # 7. Get Users with Roles & Permissions
+        # 8. Get Users with Roles & Permissions
         if path == "/api/admin/users":
             users = db.get_all_users_with_permissions()
             return self._send_json_response(200, {"status": "success", "data": users})
 
-        # 8. Get Compliance Statement
+        # 9. Get Compliance Statement
         if path in ["/api/compliance/statement", "/api/settings/compliance-statement"]:
             statement = db.get_compliance_statement()
             return self._send_json_response(200, {"status": "success", "data": statement})
 
-        # 9. Get Declarations (Protected: Compliance/Approver/Admin)
+        # 10. Get Declarations (Protected: Compliance/Approver/Admin)
         if path == "/api/declarations":
             token = self._extract_token()
             if not token or not db.verify_token(token):
@@ -102,7 +122,7 @@ class HRISApiHandler(BaseHTTPRequestHandler):
             declarations = db.get_all_declarations()
             return self._send_json_response(200, {"status": "success", "data": declarations})
 
-        # 10. Get Single Saved Declaration by ID or Number (GET /api/declarations/<id>)
+        # 11. Get Single Saved Declaration by ID or Number (GET /api/declarations/<id>)
         if path.startswith("/api/declarations/"):
             decl_id = path.replace("/api/declarations/", "").strip()
             decl = db.get_declaration_by_id(decl_id)
@@ -120,6 +140,8 @@ class HRISApiHandler(BaseHTTPRequestHandler):
             })
 
         self._send_json_response(404, {"status": "error", "message": "Route not found"})
+
+
 
     def do_POST(self):
         parsed_url = urlparse(self.path)
@@ -170,6 +192,10 @@ class HRISApiHandler(BaseHTTPRequestHandler):
 
         # 3. Save Declaration Endpoint
         if path == "/api/declarations":
+            if body_data.get("status") == "SUBMITTED":
+                validation_error = db.validate_declaration_references(body_data)
+                if validation_error:
+                    return self._send_json_response(422, {"status": "error", "message": validation_error})
             decl_id = db.save_declaration(body_data)
             return self._send_json_response(200, {
                 "status": "success",

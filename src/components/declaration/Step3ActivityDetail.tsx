@@ -1,5 +1,5 @@
 import React from "react";
-import { ActivityType, Attachment } from "../../types";
+import { ActivityType, Attachment, DeclarationIdentity, ExternalPartyInfo } from "../../types";
 import { InternalActivityForm } from "./forms/InternalActivityForm";
 import { ExternalMealForm } from "./forms/ExternalMealForm";
 import { GiftForm } from "./forms/GiftForm";
@@ -9,6 +9,7 @@ import { FacilitationForm } from "./forms/FacilitationForm";
 import { EntertainmentForm } from "./forms/EntertainmentForm";
 import { DocumentUploader } from "./DocumentUploader";
 import { Database } from "lucide-react";
+import { DeclarationRoutingFields } from "./DeclarationRoutingFields";
 
 interface Step3ActivityDetailProps {
   activityType: ActivityType;
@@ -17,6 +18,9 @@ interface Step3ActivityDetailProps {
   attachments?: Attachment[];
   onAttachmentsChange?: (attachments: Attachment[]) => void;
   errors: Record<string, string>;
+  identity: DeclarationIdentity;
+  externalParty: ExternalPartyInfo;
+  onExternalPartyChange: (data: ExternalPartyInfo) => void;
 }
 
 export const Step3ActivityDetail: React.FC<Step3ActivityDetailProps> = ({
@@ -26,6 +30,9 @@ export const Step3ActivityDetail: React.FC<Step3ActivityDetailProps> = ({
   attachments = [],
   onAttachmentsChange,
   errors,
+  identity,
+  externalParty,
+  onExternalPartyChange,
 }) => {
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-8 space-y-8">
@@ -40,6 +47,8 @@ export const Step3ActivityDetail: React.FC<Step3ActivityDetailProps> = ({
           Type: <span className="text-sky-600 font-bold">{activityType}</span>
         </div>
       </div>
+
+      <DeclarationRoutingFields sbu={identity.sbu} department={identity.department} data={externalParty} errors={errors} onChange={onExternalPartyChange} />
 
       {/* ERP Flow Banner */}
       <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-4 flex items-start gap-3">
@@ -86,6 +95,7 @@ export const Step3ActivityDetail: React.FC<Step3ActivityDetailProps> = ({
           attachments={attachments}
           onChange={(newAtts) => onAttachmentsChange?.(newAtts)}
         />
+        {errors.attachments && <p className="text-[10px] text-red-500 font-medium mt-2">{errors.attachments}</p>}
       </div>
     </div>
   );
