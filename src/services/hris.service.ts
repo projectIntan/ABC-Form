@@ -78,6 +78,44 @@ export class HRISService {
     return MOCK_USERS;
   }
 
+  static async getEmployeesByEntity(entityName: string): Promise<Employee[]> {
+    if (!entityName || entityName.trim() === "") {
+      return [];
+    }
+    try {
+      const res = await fetch(`/api/hris/employees?entity=${encodeURIComponent(entityName)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.status === "success" && Array.isArray(json.data) && json.data.length > 0) {
+          return json.data.map((d: any) => ({
+            employeeId: d.id,
+            employeeNumber: d.employee_number || d.employeeNumber,
+            fullName: d.full_name || d.fullName,
+            email: d.email,
+            positionId: d.position_id || d.positionId || "POS-01",
+            positionName: d.position_name || d.positionName,
+            entityId: d.entity_code || d.entityCode || "RUI",
+            entityName: d.entity_name || d.entityName,
+            sbuName: d.sbu_name || d.sbuName || "",
+            department: d.department || "",
+            organizationId: d.organization_id || "ORG-01",
+            organizationName: d.organization_name || d.organizationName,
+            managerEmployeeId: d.manager_id || undefined,
+            managerName: d.manager_name || undefined,
+            isActive: true,
+          }));
+        }
+      }
+    } catch {
+      // Fallback
+    }
+
+    await simulatedDelay(80);
+    return MOCK_EMPLOYEES.filter(
+      (emp) => emp.entityName.toLowerCase() === entityName.trim().toLowerCase()
+    );
+  }
+
   static async searchEmployees(query: string): Promise<Employee[]> {
     try {
       const res = await fetch(`/api/hris/employees?q=${encodeURIComponent(query)}`);

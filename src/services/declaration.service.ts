@@ -96,7 +96,19 @@ export class DeclarationService {
   static async getDeclarationById(id: string): Promise<Declaration | null> {
     await simulatedDelay(150);
     const list = this.getStoredDeclarations();
-    return list.find((d) => d.id === id) || null;
+    const local = list.find((d) => d.id === id || d.declarationNumber === id);
+    if (local) return local;
+
+    try {
+      const res = await fetch(`/api/declarations/${id}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data) return json.data;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
   }
 
   static async saveDraft(
@@ -232,6 +244,17 @@ export class DeclarationService {
 
     list.unshift(newDecl);
     this.saveStoredDeclarations(list);
+
+    // Sync to backend DB for persistence
+    try {
+      fetch("/api/declarations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newDecl),
+      }).catch(() => {});
+    } catch {
+      // offline fallback
+    }
 
     await AuditService.log({
       employeeId: data.identity.employeeId,

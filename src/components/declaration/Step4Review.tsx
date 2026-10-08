@@ -13,13 +13,16 @@ import { ShieldCheck, Edit3, UserCheck, Building2, FileText, CheckSquare, Paperc
 interface Step4ReviewProps {
   identity: DeclarationIdentity;
   externalParty: ExternalPartyInfo;
-  activityType: ActivityType;
+  activityType?: ActivityType;
   activityDetail: Record<string, any>;
   attachments?: Attachment[];
+  onAttachmentsChange?: (attachments: Attachment[]) => void;
   declarationAccepted: boolean;
-  onAcceptChange: (accepted: boolean) => void;
-  onJumpToStep: (stepNumber: number) => void;
+  onAcceptChange?: (accepted: boolean) => void;
+  onDeclarationAcceptedChange?: (accepted: boolean) => void;
+  onJumpToStep?: (stepNumber: number) => void;
   error?: string;
+  errors?: Record<string, string>;
 }
 
 export const Step4Review: React.FC<Step4ReviewProps> = ({
@@ -30,11 +33,26 @@ export const Step4Review: React.FC<Step4ReviewProps> = ({
   attachments = [],
   declarationAccepted,
   onAcceptChange,
+  onDeclarationAcceptedChange,
   onJumpToStep,
   error,
+  errors,
 }) => {
-  const actMeta = ACTIVITY_TYPES.find((a) => a.type === activityType);
+  const currentActivityType = activityType || identity?.activityType;
+  const actMeta = ACTIVITY_TYPES.find((a) => a.type === currentActivityType);
+  const isInternal = currentActivityType === "INTERNAL";
   const [statement, setStatement] = useState<ComplianceStatementSetting | null>(null);
+
+  const handleCheckboxChange = (checked: boolean) => {
+    if (typeof onAcceptChange === "function") {
+      onAcceptChange(checked);
+    }
+    if (typeof onDeclarationAcceptedChange === "function") {
+      onDeclarationAcceptedChange(checked);
+    }
+  };
+
+  const errorMessage = error || errors?.declarationAccepted;
 
   useEffect(() => {
     AdminService.getComplianceStatement().then((data) => {
@@ -67,7 +85,7 @@ export const Step4Review: React.FC<Step4ReviewProps> = ({
           </h3>
           <button
             type="button"
-            onClick={() => onJumpToStep(1)}
+            onClick={() => onJumpToStep?.(1)}
             className="text-xs font-semibold text-sky-600 hover:text-sky-700 flex items-center gap-1 hover:underline"
           >
             <Edit3 className="w-3.5 h-3.5" /> Edit
@@ -107,7 +125,7 @@ export const Step4Review: React.FC<Step4ReviewProps> = ({
       </div>
 
       {/* Summary Card 2: Informasi Pihak Eksternal (Hanya jika bukan Kegiatan Internal) */}
-      {activityType !== "INTERNAL" && (
+      {!isInternal && (
         <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
@@ -116,7 +134,7 @@ export const Step4Review: React.FC<Step4ReviewProps> = ({
             </h3>
             <button
               type="button"
-              onClick={() => onJumpToStep(2)}
+              onClick={() => onJumpToStep?.(2)}
               className="text-xs font-semibold text-sky-600 hover:text-sky-700 flex items-center gap-1 hover:underline"
             >
               <Edit3 className="w-3.5 h-3.5" /> Edit
@@ -149,7 +167,7 @@ export const Step4Review: React.FC<Step4ReviewProps> = ({
           </h3>
           <button
             type="button"
-            onClick={() => onJumpToStep(activityType === "INTERNAL" ? 2 : 3)}
+            onClick={() => onJumpToStep?.(isInternal ? 2 : 3)}
             className="text-xs font-semibold text-sky-600 hover:text-sky-700 flex items-center gap-1 hover:underline"
           >
             <Edit3 className="w-3.5 h-3.5" /> Edit
@@ -318,7 +336,7 @@ export const Step4Review: React.FC<Step4ReviewProps> = ({
       </div>
 
       {/* Approval Workflow Explanation Callout */}
-      {activityType === "GIFT" ? (
+      {currentActivityType === "GIFT" ? (
         <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3">
           <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div>
@@ -382,7 +400,7 @@ export const Step4Review: React.FC<Step4ReviewProps> = ({
           <input
             type="checkbox"
             checked={declarationAccepted}
-            onChange={(e) => onAcceptChange(e.target.checked)}
+            onChange={(e) => handleCheckboxChange(e.target.checked)}
             className="mt-0.5 w-4 h-4 text-sky-600 rounded focus:ring-sky-500 cursor-pointer"
           />
           <span className="text-xs font-bold text-slate-900 leading-snug">
@@ -390,7 +408,7 @@ export const Step4Review: React.FC<Step4ReviewProps> = ({
           </span>
         </label>
 
-        {error && <p className="text-xs font-bold text-red-500">{error}</p>}
+        {errorMessage && <p className="text-xs font-bold text-red-500">{errorMessage}</p>}
       </div>
     </div>
   );

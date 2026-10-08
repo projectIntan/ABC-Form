@@ -82,23 +82,38 @@
 * **Requirement ID:** REQ-002
 * **Feature Name:** Public Declaration Submission & 4-Step Form Wizard
 * **Status:** `WORKING`
-* **Current Behavior:** Root URL `/` langsung merender formulir deklarasi tanpa memerlukan login atau session. Karyawan/pelapor dapat mengisi deklarasi melalui 4 tahap wizard, memilih data identitas HRIS via modal pencarian pegawai, melampirkan berkas bukti (maks 5MB), dan mengirim formulir. Tombol "+ Buat Deklarasi Baru" dan reset form membersihkan cache inputan.
-* **User Action:** Membuka `http://declaration-form/`, mengisi Step 1 sampai Step 4, menyetujui pakta integritas, dan menekan tombol Kirim Deklarasi.
+* **Current Behavior:** Root URL `/` langsung merender formulir deklarasi tanpa memerlukan login atau session dengan tampilan bersih. Karyawan/pelapor mengisi formulir melalui 4 tahap wizard. Pada Step 1 (Informasi Identitas Pelapor), pengisian menggunakan struktur LOV berjenjang dengan antarmuka LOV Popup Modal Table:
+  1. Entitas Perusahaan (LOV dari master `ENTITIES`)
+  2. SBU (LOV Popup Modal berbasis TABLE dengan kolom Kode SBU, Nama SBU, Deskripsi, dan fasilitas Search — bukan dropdown/select biasa)
+  3. Departemen (LOV Popup Modal berbasis TABLE dengan kolom Kode Dept, Nama Departemen, SBU Terkait, dan fasilitas Search — bukan dropdown biasa, dependent terhadap SBU yang dipilih)
+  4. Nama Karyawan (LOV Popup Modal berbasis TABLE dengan kolom NIK/ID, Nama, Jabatan, Email, dan fasilitas Search — dependent terhadap Entitas Perusahaan yang dipilih)
+  5. Pangkat / Jabatan (Reference field, otomatis terisi dari data karyawan terpilih)
+  6. Employee ID / NIK (Reference field, otomatis terisi dari data karyawan terpilih)
+  7. Email Resmi (Reference field, otomatis terisi dari data karyawan terpilih)
+  Button "Pilih Pegawai dari HRIS" dan badge "Status: Terverifikasi HRIS" telah dihilangkan dari Step 1. Data input terdahulu dan cache dibersihkan secara otomatis saat formulir dibuka dan setelah submit sukses selesai.
+* **User Action:** Membuka `http://declaration-form/`, mengisi Step 1 sampai Step 4 dengan memilih Entitas, SBU, Departemen, dan Nama Karyawan melalui LOV, menyetujui pakta integritas, dan menekan tombol Kirim Deklarasi.
 * **System Behavior:**
-  - Menyimpan deklarasi ke backend melalui endpoint publik `POST /api/declarations`.
+  - Menyimpan deklarasi ke backend melalui endpoint publik `POST /api/declarations` dan penyimpanan lokal terverifikasi.
   - Mengalokasikan nomor registrasi format `ABC-[BRANCH][YYMM][RUNNING_NUMBER]`.
   - Jika jenis kegiatan `GIFT`, status diset `SUBMITTED` untuk review Compliance.
   - Jika jenis kegiatan non-hadiah, status diset `APPROVED` (otomatis) dan menghasilkan nomor beban ERP `EXP-YYYYMM-XXXX`.
   - Menampilkan layar konfirmasi sukses yang memuat nomor registrasi resmi serta tombol untuk mengisi deklarasi baru.
+  - Setelah declaration berhasil tersimpan, sistem secara otomatis men-generate dokumen resmi formulir deklarasi berformat Microsoft Word (`ABC_Declaration_[RegistrationNumber].docx`) berbasis referensi template `ABC DF.docx` (kode form `F-COMP-001-01`).
+  - Dokumen dibuat dengan aturan rendering kondisional ketat: hanya section jenis kegiatan yang dipilih yang dirender ke dokumen; seluruh jenis kegiatan lain tidak dirender (tidak ada section kosong).
+  - Section Informasi Pihak Eksternal hanya dirender jika jenis kegiatan membutuhkan pihak eksternal (kegiatan non-internal).
+  - Tombol `[ Download Declaration Form (.docx) ]` tersedia langsung pada layar konfirmasi sukses dan dapat diunduh oleh creator/pelapor publik secara mandiri.
+  - Jika proses pembuatan dokumen mengalami error, data deklarasi tetap tersimpan aman di database dan sistem menyediakan tombol Coba Lagi tanpa me-rollback data atau meminta pengisian ulang.
+  - Saat tombol "+ Isi Deklarasi Baru" ditekan atau form dibuka kembali, sistem mengosongkan seluruh data isian lama secara otomatis.
 * **Validation:**
-  - Step 1: NIK, nama lengkap, entitas wajib ada; jenis kegiatan wajib dipilih.
+  - Step 1: Entitas Perusahaan wajib dipilih; SBU wajib dipilih; Departemen wajib dipilih; Nama Karyawan wajib dipilih; Email resmi wajib valid; Employee ID / NIK wajib terisi; jenis kegiatan wajib dipilih.
   - Step 2: Nama perusahaan, hubungan relasi, dan kode proyek wajib ada (jika kegiatan non-internal).
   - Step 3: Tanggal kegiatan wajib ada, total estimasi biaya harus > 0. Jika kegiatan melibatkan peserta, minimal 1 karyawan Radiant Group wajib dipilih dan jumlah partisipan harus konsisten.
   - Step 4: Checkbox pernyataan kepatuhan wajib dicentang sebelum submit aktif.
 * **Business Rule:**
   - Akses publik tidak memerlukan otentikasi.
   - Peringatan batas nilai kepatuhan (`max_amount_threshold`) muncul jika estimasi biaya melebihi threshold jenis kegiatan.
-* **Workflow:** Buka `/` -> Isi Step 1-4 -> Konfirmasi -> Data Tersimpan -> Layar Nomor Registrasi Terbit.
+  - Creator dapat langsung mengunduh file dokumen deklarasi resmi hasil generate (`.docx`).
+* **Workflow:** Public Form -> Input Declaration -> Review -> Submit -> Save Declaration -> Generate Declaration Document -> Download by Creator -> Compliance Monitoring.
 * **API:** `POST /api/declarations` (Public), `GET /api/master/activity-types` (Public), `GET /api/compliance/statement` (Public), `GET /api/hris/employees` (Public).
 * **Database:** Tabel `declarations`, `attachments`, `activity_types`.
 * **Related Files:** `src/pages/CreateDeclaration.tsx`, `src/components/declaration/*`, `src/services/declaration.service.ts`, `backend/app.py`.
@@ -459,3 +474,272 @@ Setujui (Generate EXP No) ATAU Tolak (Input Alasan Penolakan)
 1. **Identity Verification untuk Public Submitter:** Apakah di masa depan diperlukan pengiriman kode OTP / verifikasi via email korporat `@radiant.co.id` saat pelapor publik memilih NIK tertentu?
 2. **Pelacakan Status Deklarasi Publik:** Apakah publik memerlukan halaman pencarian publik sederhana (misal: cek status dengan memasukkan Nomor Registrasi Deklarasi `ABC-XXXX`) tanpa perlu login ke sistem monitoring Compliance?
 3. **Rate Limiting / Anti-Spam:** Apakah pengiriman deklarasi publik memerlukan perlindungan CAPTCHA atau rate-limiting IP jika portal dibuka ke internet publik luas?
+
+---
+
+## CHG-002 — Clean Public Declaration Form & Auto Clear Previous Data
+
+**Date:** 2026-10-06  
+**Change Type:** UI Refinement & Form Lifecycle Optimization  
+**Status:** Implemented  
+
+### Previous Behavior
+* Pada halaman publik formulir deklarasi (`/`), terdapat card/banner informasi biru/hijau dengan ikon, judul *"Formulir Deklarasi Kepatuhan ABC"*, badge *"FORM TERBUKA (PUBLIC ACCESS)"*, teks pengantar publik, dan tombol *"Bersihkan Form / Cache"*.
+* Pengguna publik harus mengklik tombol *"Bersihkan Form / Cache"* secara manual jika ingin membersihkan isian form atau cache lama.
+* Data template identitas default sempat terisi dummy ("John Doe" / "EMP001"), sehingga membingungkan pelapor publik baru.
+
+### New Behavior
+1. **Pembersihan UI Formulir Deklarasi Publik:**
+   - Seluruh card/banner informasi ("Formulir Deklarasi Kepatuhan ABC", badge "FORM TERBUKA (PUBLIC ACCESS)", teks penjelasan, dan tombol "Bersihkan Form / Cache") telah dihapus dari antarmuka public declaration form.
+   - Halaman formulir langsung menampilkan Header Korporat resmi (`RADIANT GROUP - Anti-Bribery & Corruption Declaration Portal (F-COMP-001-01)`) dengan tombol `Login Compliance`, disusul langsung oleh stepper wizard dan seksi form tanpa distraksi banner.
+2. **Pembersihan Data Otomatis (Auto Clear Previous Data):**
+   - Inisialisasi formulir untuk pengguna publik dimulai dari keadaan bersih tanpa nilai residu data (field identitas NIK, nama lengkap, email, jabatan, departemen berstatus string kosong siap diisi secara mandiri atau dipilih melalui modal HRIS).
+   - Saat formulir baru dibuka (`editId` tidak ada), seluruh cache inputan browser dan storage dibersihkan secara otomatis di background tanpa memerlukan intervensi tombol manual.
+   - Setelah pelapor sukses mengirim deklarasi dan menekan tombol *"+ Isi Deklarasi Baru"*, sistem secara otomatis mereset seluruh 4-step wizard dan mengosongkan seluruh data deklarasi lama ke kondisi bersih mula-mula.
+3. **Pengelolaan Khusus Mode Draft:**
+   - Indikator draft hanya ditampilkan ketika parameter `editId` aktif (menyunting draft tersimpan), memberikan konteks yang jelas tanpa mengotori halaman publik reguler.
+
+### Impacted Areas
+* `src/pages/CreateDeclaration.tsx`: Penghapusan banner informasi, tombol bersihkan cache, modal konfirmasi reset cache manual, serta otomatisasi reset data ke clean state.
+* `src/components/declaration/Step1Identity.tsx`: Normalisasi fallback field departemen agar tidak memaksakan teks default saat data kosong.
+* `docs/CURRENT_REQUIREMENTS.md`: Pencatatan change log CHG-002 dan pembaruan spesifikasi REQ-002.
+
+### Existing Functionality Preserved
+* Akses form deklarasi publik di root `/` tanpa login.
+* Tombol "Login Compliance" di header navbar atas.
+* Wizard 4 langkah deklarasi kepatuhan.
+* Modal pencarian dan pemilihan pegawai HRIS.
+* Validasi step, threshold biaya, dan upload berkas pendukung.
+* Pembuatan nomor registrasi resmi `ABC-XXXX` dan status approval otomatis atau manual.
+* Alur proteksi login modul monitoring internal bagi Tim Compliance.
+
+---
+
+## CHG-003 — Update Reporter Identity Fields & Employee LOV
+
+**Date:** 2026-10-07
+
+**Change Type:** Requirement Change
+
+**Status:** Implemented
+
+### Previous Behavior
+
+Bagian Informasi Identitas Pelapor menggunakan field dengan urutan existing sebelumnya dan menyediakan:
+
+- Tombol "Pilih Pegawai dari HRIS"
+- Status "Terverifikasi HRIS"
+- Field employee yang belum menggunakan struktur dependency baru.
+
+### New Behavior
+
+Urutan field Informasi Identitas Pelapor diubah menjadi:
+
+1. Entitas Perusahaan — LOV
+2. SBU — LOV
+3. Departement — LOV berdasarkan SBU
+4. Nama Karyawan — LOV berdasarkan Entitas
+5. Pangkat / Jabatan — reference dari employee
+6. Employee ID / NIK — reference dari employee
+7. Email — reference dari employee
+
+Selain itu:
+
+- Button "Pilih Pegawai dari HRIS" dihapus.
+- Status "Terverifikasi HRIS" dihapus.
+- Employee dipilih langsung melalui LOV Nama Karyawan.
+- Pemilihan employee berdasarkan Entitas Perusahaan.
+- Department berdasarkan SBU.
+- Pangkat/Jabatan, Employee ID/NIK, dan Email otomatis mengikuti employee yang dipilih.
+- Field reference tidak diinput manual.
+
+### Dependency
+
+```text
+Entity → Employee
+
+SBU → Department
+
+Employee → Pangkat/Jabatan
+Employee → Employee ID/NIK
+Employee → Email
+```
+
+### Reset Rules
+
+Jika Entity berubah:
+
+* reset Employee;
+* reset Pangkat/Jabatan;
+* reset Employee ID/NIK;
+* reset Email.
+
+Jika SBU berubah:
+
+* reset Department.
+
+Jika Employee berubah:
+
+* refresh Pangkat/Jabatan;
+* refresh Employee ID/NIK;
+* refresh Email.
+
+### Removed UI
+
+* "Pilih Pegawai dari HRIS"
+* "Status: Terverifikasi HRIS"
+
+### Impacted Areas
+
+* Declaration Form
+* Reporter Identity Section (`src/components/declaration/Step1Identity.tsx`)
+* LOV components (`ENTITIES`, `SBU_LIST`, `SBU_DEPARTMENTS_MAP`)
+* Employee data source & HRIS API (`src/services/hris.service.ts`, `backend/app.py`, `backend/mysql_db.py`)
+* Entity/SBU/Department dependency
+* Form validation (`src/pages/CreateDeclaration.tsx`)
+
+### Existing Functionality Preserved
+
+* Existing employee master/HRIS source
+* Declaration submission
+* Declaration validation
+* Declaration database storage
+* Compliance monitoring
+* Authentication for Compliance
+* Existing declaration workflow
+* Existing business rules not directly affected
+
+### Database
+
+No database schema change. Added employees in SQLite seed to cover all 5 entities.
+
+### API
+
+- Reused `GET /api/hris/employees` with support for optional `?entity=` filtering parameter.
+- Added `HRISService.getEmployeesByEntity(entityName)` with automated fallback to mock if API unavailable.
+
+### Open Questions
+
+None. Master entities, SBUs, departments, and employee data are fully aligned between frontend constants and backend HRIS API.
+
+---
+
+## CHG-004 — SBU & Department LOV Popup Table Modal Correction
+
+**Date:** 2026-10-07  
+**Change Type:** UI/UX & Component Architecture Correction  
+**Status:** Implemented  
+
+### Previous Behavior
+* Field SBU dan Departemen pada bagian *Informasi Identitas Pelapor* diimplementasikan menggunakan elemen `<select>` dropdown biasa.
+* Pengguna memilih SBU dan Departemen melalui native browser select option list tanpa penyajian tabel terstruktur maupun fitur pencarian.
+
+### New Behavior
+1. **SBU — LOV Popup Modal berbasis TABLE:**
+   - Field SBU tidak lagi menggunakan HTML `<select>` atau dropdown biasa.
+   - SBU ditampilkan dalam kontrol LOV lookup. Mengklik field/tombol `[ Pilih SBU ] 🔍` membuka modal popup dialog yang menampilkan data dalam format **TABLE**.
+   - Kolom tabel SBU: `Kode SBU` (contoh: `SBU001`, `SBU002`), `Nama SBU`, `Deskripsi / Lingkup`, dan `Aksi (Pilih)`.
+   - Dilengkapi input search untuk menyaring Kode atau Nama SBU secara instan.
+   - Pengguna memilih baris tabel -> SBU terpilih -> popup menutup otomatis -> nilai SBU terisi pada formulir.
+   - Jika SBU diubah: Departemen yang sebelumnya dipilih otomatis di-reset menjadi kosong.
+2. **Departemen — LOV Popup Modal berbasis TABLE (Dependent terhadap SBU):**
+   - Field Departemen tidak lagi menggunakan dropdown biasa, melainkan LOV lookup dengan modal popup **TABLE**.
+   - Data Departemen dalam tabel disaring secara ketat berdasarkan SBU yang dipilih (`SBU_MASTER_LIST` / `DEPARTMENT_MASTER_LIST`).
+   - Jika SBU belum dipilih: kontrol Departemen dinonaktifkan (*disabled*) dan jika diklik memunculkan notifikasi/pesan peringatan bahwa SBU wajib dipilih terlebih dahulu.
+   - Kolom tabel Departemen: `Kode Dept` (contoh: `DEPT-EOS-01`), `Nama Departemen`, `SBU Terkait`, dan `Aksi (Pilih)`.
+   - Dilengkapi input search untuk menyaring Kode atau Nama Departemen.
+   - Mengklik baris tabel -> Departemen terisi -> popup menutup otomatis.
+   - Jika SBU diubah atau dihapus, field Departemen otomatis di-reset ke kosong.
+3. **Nama Karyawan — LOV Popup Modal berbasis TABLE (Dependent terhadap Entitas):**
+   - Menggunakan modal tabel karyawan terverifikasi HRIS (`EmployeeLovModal`) dengan kolom `NIK / ID`, `Nama Karyawan`, `Pangkat / Jabatan`, `Email`, dan tombol `Pilih`.
+   - Disaring berdasarkan Entitas Perusahaan yang aktif.
+   - Memilih karyawan otomatis mengisi seluruh *Reference Fields* (Pangkat/Jabatan, Employee ID/NIK, Email).
+
+### Dependency & Reset Flow
+```text
+Entitas Perusahaan (LOV)
+  ↓
+Nama Karyawan (LOV Modal Table) → Auto-fill: Pangkat, NIK, Email
+  (Jika Entitas berubah: reset Karyawan, Pangkat, NIK, Email)
+
+SBU (LOV Modal Table)
+  ↓
+Departemen (LOV Modal Table)
+  (Jika SBU berubah: reset Departemen)
+```
+
+### Impacted Areas
+* `src/constants/activityTypes.ts`: Penambahan master data terstruktur `SBU_MASTER_LIST` (dengan `code`, `name`, `description`) dan `DEPARTMENT_MASTER_LIST` (dengan `code`, `name`, `sbuName`).
+* `src/components/declaration/SbuLovModal.tsx`: Komponen popup modal tabel untuk pemilihan SBU.
+* `src/components/declaration/DepartmentLovModal.tsx`: Komponen popup modal tabel untuk pemilihan Departemen dengan validasi ketergantungan SBU.
+* `src/components/declaration/EmployeeLovModal.tsx`: Komponen popup modal tabel untuk pemilihan Karyawan dengan filter Entitas.
+* `src/components/declaration/Step1Identity.tsx`: Integrasi antarmuka input LOV lookup dan penanganan pembukaan modal tabel.
+* `docs/CURRENT_REQUIREMENTS.md`: Pembaruan spesifikasi REQ-002 dan pencatatan riwayat perubahan CHG-004.
+
+### Existing Functionality Preserved
+* Seluruh 4 tahapan wizard formulir deklarasi publik.
+* Alur validasi form, auto-reset cache/storage saat load dan pasca submit.
+* Auto-fill reference fields (Pangkat/Jabatan, Employee ID/NIK, Email Resmi).
+* Alur persetujuan Compliance, penyimpanan database, dan nomor registrasi resmi.
+
+---
+
+## CHG-005 — Generate & Download Declaration Form After Submission
+
+**Date:** 2026-10-07  
+**Change Type:** Feature Enhancement & Document Generation  
+**Status:** Implemented  
+
+### Previous Behavior
+* Setelah pengguna melakukan submit deklarasi, sistem hanya menyimpan data deklarasi dan menampilkan nomor registrasi serta konfirmasi status.
+* Belum tersedia fitur otomatis untuk men-generate dokumen resmi formulir deklarasi yang dapat langsung diunduh oleh creator/pelapor pasca submit.
+* Template statis `ABC DF.docx` menampilkan seluruh jenis kegiatan dalam satu file tanpa pemisahan dinamis.
+
+### New Behavior
+1. **Pembuatan Dokumen Otomatis Pasca Submit:**
+   - Setelah declaration berhasil tersimpan (melalui API/database), sistem secara otomatis memicu proses pembuatan file dokumen resmi berformat Microsoft Word (`.docx`).
+   - Dokumen dibuat berdasarkan data deklarasi yang berhasil tersimpan di sistem, bukan semata-mata dari state browser sementara.
+2. **Aturan Rendering Kondisional Kegiatan (Conditional Activity Rendering):**
+   - Dokumen HANYA menampilkan section jenis kegiatan yang dipilih oleh pelapor (berdasarkan kode/ID `activityType` yang tersimpan).
+   - Seluruh jenis kegiatan lainnya yang tidak dipilih TIDAK BOLEH muncul dalam dokumen sama sekali (tidak ada section kosong atau placeholder).
+3. **Penyajian Kondisional Informasi Pihak Eksternal:**
+   - Bagian *Informasi Pihak Eksternal* hanya dirender jika jenis kegiatan melibatkan pihak eksternal (yaitu kegiatan non-`INTERNAL`).
+   - Jika jenis kegiatan adalah `INTERNAL`, section *Informasi Pihak Eksternal* tidak ditampilkan sama sekali.
+4. **Pemetaan Data Lengkap & Pembaruan Identitas:**
+   - Dokumen memuat data identitas terbaru: Entitas Perusahaan, SBU, Departemen, Nama Karyawan, Pangkat / Jabatan, Employee ID / NIK, Email Resmi, dan Jenis Kegiatan.
+   - Detail kegiatan memetakan seluruh field spesifik jenis kegiatan (tanggal, lokasi, tujuan, jumlah partisipan, daftar nama karyawan Radiant Group, rincian biaya / estimasi).
+   - Deklarasi integritas kepatuhan & transparansi (bilingual ID/EN) dan tanda tangan digital tercetak di bagian akhir.
+5. **Akses Download untuk Creator (Tanpa Login):**
+   - Tombol `[ Download Declaration Form (.docx) ]` ditampilkan di layar sukses segera setelah dokumen siap.
+   - Format penamaan file konsisten: `ABC_Declaration_[RegistrationNumber].docx` (contoh: `ABC_Declaration_ABC-RUI2610-0001.docx`).
+   - Pelapor publik dapat mengunduh dokumen secara langsung menggunakan identifier dari hasil submit tanpa memerlukan akun login.
+6. **Ketahanan Terhadap Error (Resilience & Error Handling):**
+   - Jika terjadi kendala pada saat generasi dokumen, deklarasi tetap aman tersimpan di database (tidak terjadi rollback).
+   - Pengguna menerima pemberitahuan yang jelas dan disediakan tombol *Coba Lagi Buat Dokumen* tanpa perlu melakukan submit ulang deklarasi.
+
+### Activity Rendering Rule
+```text
+Selected Activity Type (Code/ID)
+        ↓
+Render corresponding activity section ONLY
+(Section kegiatan lain tidak di-render sama sekali)
+```
+
+### Impacted Areas
+* `src/services/document.service.ts`: Service generator dokumen DOCX berbasis library `docx` dengan layout standar template `ABC DF.docx` (kode form F-COMP-001-01).
+* `src/pages/CreateDeclaration.tsx`: Integrasi alur generasi dokumen pasca-submit, penanganan error tanpa rollback, dan penyediaan tombol download di layar sukses.
+* `src/pages/DeclarationDetail.tsx`: Penambahan tombol unduh dokumen resmi bagi Compliance Officer.
+* `backend/app.py` & `backend/mysql_db.py`: Endpoint `GET /api/declarations/:id` dan metode pencarian single declaration by id.
+* `src/services/declaration.service.ts`: Sinkronisasi otomatis ke backend API pasca penyimpanan lokal.
+* `docs/CURRENT_REQUIREMENTS.md`: Pembaruan REQ-002 dan pencatatan riwayat perubahan CHG-005.
+
+### Existing Functionality Preserved
+* Seluruh 4 langkah form wizard dan validasi input.
+* Mekanisme approval otomatis untuk non-gift dan review Compliance untuk gift.
+* Keamanan modul monitoring yang tetap terproteksi otentikasi login Compliance.
+* Skema database dan integritas data deklarasi.
+
+### Open Questions
+1. **Format Dokumen Final (DOCX vs PDF):** Saat ini dokumen di-generate dalam format `.docx` sesuai template `ABC DF.docx`. Apakah di masa mendatang diperlukan opsi konversi otomatis ke PDF bertanda tangan digital tersertifikasi?
+
+

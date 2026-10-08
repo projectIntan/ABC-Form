@@ -53,7 +53,8 @@ class HRISApiHandler(BaseHTTPRequestHandler):
         # 2. Get HRIS Employees List
         if path == "/api/hris/employees":
             search_query = query_params.get("q", [None])[0] or query_params.get("query", [None])[0]
-            employees = db.get_all_employees(query=search_query)
+            entity_query = query_params.get("entity", [None])[0]
+            employees = db.get_all_employees(query=search_query, entity=entity_query)
             return self._send_json_response(200, {
                 "status": "success",
                 "count": len(employees),
@@ -100,6 +101,14 @@ class HRISApiHandler(BaseHTTPRequestHandler):
                 return self._send_json_response(401, {"status": "error", "message": "Authentication required to view declarations monitoring"})
             declarations = db.get_all_declarations()
             return self._send_json_response(200, {"status": "success", "data": declarations})
+
+        # 10. Get Single Saved Declaration by ID or Number (GET /api/declarations/<id>)
+        if path.startswith("/api/declarations/"):
+            decl_id = path.replace("/api/declarations/", "").strip()
+            decl = db.get_declaration_by_id(decl_id)
+            if decl:
+                return self._send_json_response(200, {"status": "success", "data": decl})
+            return self._send_json_response(404, {"status": "error", "message": "Declaration not found"})
 
         # Health Check
         if path == "/api/health" or path == "/":

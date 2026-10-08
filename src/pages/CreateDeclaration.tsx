@@ -25,16 +25,16 @@ import {
   CheckCircle2,
   FileText,
   LayoutDashboard,
-  RotateCcw,
   PlusCircle,
-  Sparkles,
-  FileCheck2,
   Building2,
   ShieldCheck,
   Lock,
   LogOut,
   UserCheck,
+  Download,
+  Loader2,
 } from "lucide-react";
+import { DeclarationDocumentService } from "../services/document.service";
 
 interface CreateDeclarationProps {
   isPublicRoot?: boolean;
@@ -51,35 +51,39 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [isResetConfirmModalOpen, setIsResetConfirmModalOpen] = useState(false);
   const [submittedResult, setSubmittedResult] = useState<Declaration | null>(null);
+
+  // Document Generation States (Post-submission)
+  const [isDocGenerating, setIsDocGenerating] = useState(false);
+  const [isDocReady, setIsDocReady] = useState(false);
+  const [docError, setDocError] = useState<string | null>(null);
 
   const getFreshIdentity = useCallback((): DeclarationIdentity => {
     if (user?.employee) {
       return {
-        employeeId: user.employee.employeeId || "EMP001",
-        fullName: user.employee.fullName || "John Doe",
-        email: user.employee.email || "john.doe@radiant.co.id",
+        employeeId: user.employee.employeeId || "",
+        fullName: user.employee.fullName || "",
+        email: user.employee.email || "",
         entity: user.employee.entityName || "PT Radiant Utama Interinsco Tbk",
-        position: user.employee.positionName || "Operations Supervisor",
-        sbu: user.employee.sbuName || "SBU Energy & Offshore Services",
-        department: user.employee.department || "Operations & Field Management",
-        organizationHierarchy: user.employee.organizationName || "Operations & Field Management",
-        managerName: user.employee.managerName || "Jane Smith",
+        position: user.employee.positionName || "",
+        sbu: user.employee.sbuName || "",
+        department: user.employee.department || "",
+        organizationHierarchy: user.employee.organizationName || "",
+        managerName: user.employee.managerName || "",
         activityType: "INTERNAL",
       };
     }
-    // Default initial template for Public Submitter
+    // Clean initial empty template for Public Submitter (auto-cleared)
     return {
-      employeeId: "EMP001",
-      fullName: "John Doe",
-      email: "john.doe@radiant.co.id",
-      entity: "PT Radiant Utama Interinsco Tbk",
-      position: "Operations Supervisor",
-      sbu: "SBU Energy & Offshore Services",
-      department: "Operations & Field Management",
-      organizationHierarchy: "Operations & Field Management",
-      managerName: "Jane Smith",
+      employeeId: "",
+      fullName: "",
+      email: "",
+      entity: "",
+      position: "",
+      sbu: "",
+      department: "",
+      organizationHierarchy: "",
+      managerName: "",
       activityType: "INTERNAL",
     };
   }, [user]);
@@ -102,8 +106,10 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
     setCurrentStep(1);
     setIsLoading(false);
     setIsConfirmModalOpen(false);
-    setIsResetConfirmModalOpen(false);
     setSubmittedResult(null);
+    setIsDocGenerating(false);
+    setIsDocReady(false);
+    setDocError(null);
     setErrors({});
     setDeclarationAccepted(false);
     setAttachments([]);
@@ -230,9 +236,18 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
     const errs: Record<string, string> = {};
 
     if (stepNumber === 1) {
-      if (!identity.fullName) errs.fullName = "Nama lengkap wajib diisi.";
+      if (!identity.entity || !identity.entity.trim())
+        errs.entity = "Entitas Perusahaan wajib dipilih.";
+      if (!identity.sbu || !identity.sbu.trim())
+        errs.sbu = "SBU wajib dipilih.";
+      if (!identity.department || !identity.department.trim())
+        errs.department = "Departemen wajib dipilih.";
+      if (!identity.fullName || !identity.fullName.trim())
+        errs.fullName = "Nama Karyawan wajib dipilih.";
       if (!identity.email || !identity.email.includes("@"))
-        errs.email = "Email tidak valid.";
+        errs.email = "Email resmi karyawan wajib terisi dan valid.";
+      if (!identity.employeeId || !identity.employeeId.trim())
+        errs.employeeId = "Employee ID / NIK belum terisi.";
       if (!identity.activityType)
         errs.activityType = "Silakan pilih jenis kegiatan.";
     }
@@ -419,7 +434,24 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
       });
 
       setIsConfirmModalOpen(false);
-      setSubmittedResult(res);
+
+      // Retrieve saved declaration from stored declarations (Data Integrity)
+      const savedDecl = (await DeclarationService.getDeclarationById(res.id)) || res;
+      setSubmittedResult(savedDecl);
+
+      // Automatic document generation flow
+      setIsDocGenerating(true);
+      setDocError(null);
+      try {
+        await DeclarationDocumentService.generateDocumentBlob(savedDecl);
+        setIsDocReady(true);
+      } catch (docErr: any) {
+        console.error("[Document Generation Error]", docErr);
+        setDocError("Dokumen belum berhasil dibuat otomatis. Anda dapat mencoba lagi.");
+        setIsDocReady(false);
+      } finally {
+        setIsDocGenerating(false);
+      }
 
       const isGift = res.identity.activityType === "GIFT";
       showToast(
@@ -432,6 +464,34 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
       showToast("Gagal mengirim deklarasi.", "error");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDownloadDoc = async () => {
+    if (!submittedResult) return;
+    try {
+      await DeclarationDocumentService.downloadDocument(submittedResult);
+      showToast("Dokumen Declaration Form berhasil diunduh (.docx)", "success");
+    } catch (err) {
+      console.error("[Download Error]", err);
+      showToast("Gagal mengunduh dokumen deklarasi.", "error");
+    }
+  };
+
+  const handleRetryDocGen = async () => {
+    if (!submittedResult) return;
+    setIsDocGenerating(true);
+    setDocError(null);
+    try {
+      await DeclarationDocumentService.generateDocumentBlob(submittedResult);
+      setIsDocReady(true);
+      showToast("Dokumen Declaration Form siap diunduh!", "success");
+    } catch (err) {
+      console.error("[Retry Doc Gen Error]", err);
+      setDocError("Gagal membuat dokumen deklarasi. Silakan periksa kembali atau coba lagi.");
+      setIsDocReady(false);
+    } finally {
+      setIsDocGenerating(false);
     }
   };
 
@@ -502,6 +562,55 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
               </div>
             </div>
 
+            {/* Download Declaration Form Document Section */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-sky-50/80 border border-sky-200/80 text-left space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">
+                      Dokumen Formulir Deklarasi ABC
+                    </h4>
+                    <p className="text-xs text-slate-500 font-mono">
+                      {DeclarationDocumentService.getFileName(submittedResult)}
+                    </p>
+                  </div>
+                </div>
+
+                {isDocGenerating ? (
+                  <div className="flex items-center gap-2 px-4 py-2.5 bg-white rounded-xl border border-sky-200 text-xs font-semibold text-sky-700 shadow-2xs">
+                    <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
+                    <span>Menyiapkan Dokumen...</span>
+                  </div>
+                ) : isDocReady ? (
+                  <button
+                    type="button"
+                    onClick={handleDownloadDoc}
+                    className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" /> Download Declaration Form (.docx)
+                  </button>
+                ) : docError ? (
+                  <button
+                    type="button"
+                    onClick={handleRetryDocGen}
+                    className="w-full sm:w-auto px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    Coba Lagi Buat Dokumen
+                  </button>
+                ) : null}
+              </div>
+
+              {docError && (
+                <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 p-2.5 rounded-lg">
+                  <p className="font-semibold">Pemberitahuan:</p>
+                  <p>{docError} (Data deklarasi Anda telah aman tersimpan pada sistem).</p>
+                </div>
+              )}
+            </div>
+
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
               <button
@@ -558,9 +667,6 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
               <h1 className="text-sm font-bold text-slate-900 uppercase tracking-tight">
                 RADIANT GROUP
               </h1>
-              <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 uppercase">
-                Public Form
-              </span>
             </div>
             <p className="text-[11px] text-slate-500 font-medium">
               Anti-Bribery & Corruption Declaration Portal (F-COMP-001-01)
@@ -594,60 +700,37 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
 
       {/* Main Container */}
       <main className="flex-1 p-4 sm:p-8 max-w-5xl w-full mx-auto space-y-6">
-        {/* Top Banner / Mode Toolbar */}
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
-              {editId ? <FileText className="w-5 h-5" /> : <Sparkles className="w-5 h-5 text-emerald-500" />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-slate-900">
-                  {editId ? "Edit Draft Deklarasi" : "Formulir Deklarasi Kepatuhan ABC"}
-                </h2>
-                {editId ? (
+        {/* Draft Mode Notification (Hanya tampil saat mengedit draft tersimpan) */}
+        {editId && (
+          <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-bold text-slate-900">Edit Draft Deklarasi</h2>
                   <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-bold text-[10px] uppercase">
                     Draft Mode
                   </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold text-[10px] uppercase flex items-center gap-1">
-                    <FileCheck2 className="w-3 h-3" /> Form Terbuka (Public Access)
-                  </span>
-                )}
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Menyunting draft tersimpan: {editId}. Perubahan dapat disimpan kembali sebagai draft atau disubmit.
+                </p>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {editId
-                  ? `Menyunting draft tersimpan: ${editId}. Seluruh perubahan dapat disimpan kembali sebagai draft atau disubmit.`
-                  : "Silakan lengkapi formulir deklarasi kepatuhan kegiatan bisnis. Form ini dapat diakses dan diisi tanpa perlu login akun."}
-              </p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-end sm:self-center">
-            {editId && (
-              <button
-                type="button"
-                onClick={() => {
-                  navigate(isPublicRoot ? "/" : "/declarations/create");
-                  resetToCleanState(true);
-                }}
-                className="px-3.5 py-2 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-              >
-                <PlusCircle className="w-4 h-4" /> Deklarasi Baru
-              </button>
-            )}
-
             <button
               type="button"
-              onClick={() => setIsResetConfirmModalOpen(true)}
-              className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-              title="Kosongkan form dan bersihkan cache"
+              onClick={() => {
+                navigate(isPublicRoot ? "/" : "/declarations/create");
+                resetToCleanState(false);
+              }}
+              className="px-3.5 py-2 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
             >
-              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-              <span>Bersihkan Form / Cache</span>
+              <PlusCircle className="w-4 h-4" /> Deklarasi Baru
             </button>
           </div>
-        </div>
+        )}
 
         {/* Wizard Progress Stepper */}
         <div className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-2xs">
@@ -699,16 +782,27 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
             <Step4Review
               identity={identity}
               externalParty={externalParty}
+              activityType={identity.activityType}
               activityDetail={activityDetail}
               attachments={attachments}
               onAttachmentsChange={setAttachments}
               declarationAccepted={declarationAccepted}
+              onAcceptChange={(accepted) => {
+                setDeclarationAccepted(accepted);
+                if (errors.declarationAccepted) {
+                  setErrors((prev) => ({ ...prev, declarationAccepted: "" }));
+                }
+              }}
               onDeclarationAcceptedChange={(accepted) => {
                 setDeclarationAccepted(accepted);
                 if (errors.declarationAccepted) {
                   setErrors((prev) => ({ ...prev, declarationAccepted: "" }));
                 }
               }}
+              onJumpToStep={(stepNumber) => {
+                setCurrentStep(stepNumber);
+              }}
+              error={errors.declarationAccepted}
               errors={errors}
             />
           )}
@@ -781,20 +875,6 @@ export const CreateDeclaration: React.FC<CreateDeclarationProps> = ({ isPublicRo
         onConfirm={handleSubmitFinal}
         onCancel={() => setIsConfirmModalOpen(false)}
         isLoading={isLoading}
-      />
-
-      {/* Reset Cache & Clean State Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={isResetConfirmModalOpen}
-        title="Bersihkan Cache & Form Deklarasi?"
-        message="Tindakan ini akan mengosongkan seluruh isian formulir saat ini dan membersihkan cache input lokal. Anda akan memulai dari formulir baru yang bersih."
-        confirmLabel="Ya, Bersihkan"
-        cancelLabel="Batal"
-        onConfirm={() => {
-          setIsResetConfirmModalOpen(false);
-          resetToCleanState(true);
-        }}
-        onCancel={() => setIsResetConfirmModalOpen(false)}
       />
 
       {/* Enterprise Footer */}

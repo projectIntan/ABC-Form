@@ -24,6 +24,7 @@ import {
   Download,
   File as FileIcon,
 } from "lucide-react";
+import { DeclarationDocumentService } from "../services/document.service";
 
 export const DeclarationDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -66,6 +67,17 @@ export const DeclarationDetail: React.FC = () => {
       showToast(err.message || "Gagal menyetujui deklarasi", "error");
     } finally {
       setIsActionLoading(false);
+    }
+  };
+
+  const handleDownloadDoc = async () => {
+    if (!decl) return;
+    try {
+      await DeclarationDocumentService.downloadDocument(decl);
+      showToast("Dokumen Declaration Form berhasil diunduh (.docx)", "success");
+    } catch (err) {
+      console.error("[Download Error]", err);
+      showToast("Gagal mengunduh dokumen deklarasi.", "error");
     }
   };
 
@@ -156,7 +168,18 @@ export const DeclarationDetail: React.FC = () => {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Download Official DOCX Document Button */}
+          <button
+            type="button"
+            onClick={handleDownloadDoc}
+            className="px-4 py-2.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-2xs transition-colors cursor-pointer"
+            title="Download Form Deklarasi ABC (.docx)"
+          >
+            <Download className="w-4 h-4 text-sky-600" />
+            <span>Unduh Form (.docx)</span>
+          </button>
+
           {decl.status === "DRAFT" && (
             <Link
               to={`/declarations/create?editId=${decl.id}`}

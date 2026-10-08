@@ -254,6 +254,23 @@ class HRISDatabaseManager:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, emp_seed)
 
+        # Seed PCC (Project Cost Controller) Employees if missing
+        pcc_seeds = [
+            ("EMP-PCC-001", "100101", "Bambang Prakoso, S.T.", "bambang.prakoso@radiant.co.id", "+62 811-100-101", "POS-PCC-01", "Project Cost Controller (PCC)", "RUI", "PT Radiant Utama Interinsco Tbk", "HO", "Head Office Jakarta", "Operations & Field Management", "SBU Energy & Offshore Services", "EMP-2026-002", "Sari Intan", "EMP-2026-003", "Budi Santoso"),
+            ("EMP-PCC-002", "100102", "Andi Firmansyah, S.E.", "andi.firmansyah@radiant.co.id", "+62 811-100-102", "POS-PCC-02", "Project Cost Controller (PCC)", "RG", "PT Radiant Group", "HO", "Head Office Jakarta", "Supply Chain & Procurement", "SBU Energy & Offshore Services", "EMP-2026-002", "Sari Intan", "EMP-2026-003", "Budi Santoso"),
+            ("EMP-PCC-003", "100201", "Fitri Handayani, S.Ak.", "fitri.handayani@radiant.co.id", "+62 811-100-201", "POS-PCC-03", "Project Cost Controller (PCC)", "RG", "PT Radiant Group", "HO", "Head Office Jakarta", "Finance, Tax & Control", "SBU Corporate & Holding Services", "EMP-2026-003", "Budi Santoso", "EMP-2026-003", "Budi Santoso"),
+            ("EMP-PCC-004", "100202", "Dian Anggraini, M.M.", "dian.anggraini@radiant.co.id", "+62 811-100-202", "POS-PCC-04", "Project Cost Controller (PCC)", "SI", "PT Supraco Indonesia", "HO", "Head Office Jakarta", "Corporate Legal & Compliance", "SBU Corporate & Holding Services", "EMP-2026-003", "Budi Santoso", "EMP-2026-003", "Budi Santoso"),
+            ("EMP-PCC-005", "100301", "Dimas Anggara, S.E.", "dimas.anggara@radiant.co.id", "+62 811-100-301", "POS-PCC-05", "Project Cost Controller (PCC)", "RUI", "PT Radiant Utama Interinsco Tbk", "HO", "Head Office Jakarta", "Commercial & Business Development", "SBU Trading & Agency", "EMP-2026-003", "Budi Santoso", "EMP-2026-003", "Budi Santoso"),
+            ("EMP-PCC-006", "100401", "Ratna Sari Dewi, S.T.", "ratna.sari@radiant.co.id", "+62 811-100-401", "POS-PCC-06", "Project Cost Controller (PCC)", "RTI", "PT Radiant Tunas Interinsco", "HO", "Head Office Jakarta", "Technical Inspection & Engineering", "SBU Inspection & Certification", "EMP-2026-003", "Budi Santoso", "EMP-2026-003", "Budi Santoso"),
+        ]
+        for pcc in pcc_seeds:
+            cursor.execute("SELECT id FROM employees WHERE id = ? OR employee_number = ?", (pcc[0], pcc[1]))
+            if not cursor.fetchone():
+                cursor.execute("""
+                    INSERT INTO employees (id, employee_number, full_name, email, phone_number, position_id, position_name, entity_code, entity_name, branch_code, branch_name, department, organization_name, direct_supervisor_id, direct_supervisor_name, manager_id, manager_name)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, pcc)
+
         conn.commit()
         conn.close()
 
@@ -379,15 +396,22 @@ class HRISDatabaseManager:
         conn.close()
         return True
 
-    def get_all_employees(self, query=None):
+    def get_all_employees(self, query=None, entity=None):
         conn = self.get_connection()
         cursor = conn.cursor()
+        conditions = []
+        params = []
         if query and query.strip():
             q = f"%{query.strip().lower()}%"
-            cursor.execute("""
-                SELECT * FROM employees 
-                WHERE LOWER(full_name) LIKE ? OR LOWER(employee_number) LIKE ? OR LOWER(position_name) LIKE ? OR LOWER(department) LIKE ?
-            """, (q, q, q, q))
+            conditions.append("(LOWER(full_name) LIKE ? OR LOWER(employee_number) LIKE ? OR LOWER(position_name) LIKE ? OR LOWER(department) LIKE ?)")
+            params.extend([q, q, q, q])
+        if entity and entity.strip():
+            conditions.append("LOWER(entity_name) = ?")
+            params.append(entity.strip().lower())
+
+        if conditions:
+            where_sql = " WHERE " + " AND ".join(conditions)
+            cursor.execute(f"SELECT * FROM employees {where_sql} ORDER BY full_name ASC", params)
         else:
             cursor.execute("SELECT * FROM employees ORDER BY full_name ASC")
         rows = cursor.fetchall()
@@ -401,6 +425,114 @@ class HRISDatabaseManager:
         row = cursor.fetchone()
         conn.close()
         return dict(row) if row else None
+
+    # --- Master Project Codes Catalog ---
+    PROJECT_CODES = [
+        # SBU Energy & Offshore Services - DEPT-EOS-01 Operations & Field Management
+        {"code": "PRJ-EOS-001", "name": "Offshore Platform Maintenance Block Mahakam", "description": "Pekerjaan inspeksi dan pemeliharaan platform lepas pantai Blok Mahakam", "departmentCode": "DEPT-EOS-01", "departmentName": "Operations & Field Management", "sbuName": "SBU Energy & Offshore Services"},
+        {"code": "PRJ-EOS-002", "name": "Subsea Pipeline Integrity Survey Natuna", "description": "Survei integritas pipa bawah laut Laut Natuna", "departmentCode": "DEPT-EOS-01", "departmentName": "Operations & Field Management", "sbuName": "SBU Energy & Offshore Services"},
+        {"code": "PRJ-EOS-003", "name": "Wellhead Overhaul & Hook-Up Operations", "description": "Operasi perbaikan dan instalasi kepala sumur migas", "departmentCode": "DEPT-EOS-01", "departmentName": "Operations & Field Management", "sbuName": "SBU Energy & Offshore Services"},
+
+        # SBU Energy & Offshore Services - DEPT-EOS-02 Supply Chain & Procurement
+        {"code": "PRJ-SCM-001", "name": "Strategic Marine Logistics & Vessel Chartering", "description": "Pengadaan dan penyewaan kapal logistik operasional lepas pantai", "departmentCode": "DEPT-EOS-02", "departmentName": "Supply Chain & Procurement", "sbuName": "SBU Energy & Offshore Services"},
+        {"code": "PRJ-SCM-002", "name": "Turbine Spare Parts Global Procurement 2026", "description": "Pengadaan suku cadang turbin dan generator industri", "departmentCode": "DEPT-EOS-02", "departmentName": "Supply Chain & Procurement", "sbuName": "SBU Energy & Offshore Services"},
+
+        # SBU Energy & Offshore Services - DEPT-EOS-03 Health, Safety & Environment (HSE)
+        {"code": "PRJ-HSE-001", "name": "Offshore Safety Compliance & Environmental Audit", "description": "Audit kepatuhan K3LL dan sertifikasi lingkungan hidup", "departmentCode": "DEPT-EOS-03", "departmentName": "Health, Safety & Environment (HSE)", "sbuName": "SBU Energy & Offshore Services"},
+        {"code": "PRJ-HSE-002", "name": "Emergency Response Drills & Fire Fighting Training", "description": "Pelatihan tanggap darurat dan simulasi pemadam kebakaran rig", "departmentCode": "DEPT-EOS-03", "departmentName": "Health, Safety & Environment (HSE)", "sbuName": "SBU Energy & Offshore Services"},
+
+        # SBU Energy & Offshore Services - DEPT-EOS-04 Executive Operations & Management
+        {"code": "PRJ-EOM-001", "name": "Energy Transition & Asset Modernization Program", "description": "Program strategis dekarbonisasi dan modernisasi aset operasional", "departmentCode": "DEPT-EOS-04", "departmentName": "Executive Operations & Management", "sbuName": "SBU Energy & Offshore Services"},
+
+        # SBU Corporate & Holding Services - DEPT-CHS-01 Corporate Legal & Compliance
+        {"code": "PRJ-LEG-001", "name": "ISO 37001 Anti-Bribery Management System Surveillance", "description": "Sertifikasi dan audit pengawasan SMAP ISO 37001 Radiant Group", "departmentCode": "DEPT-CHS-01", "departmentName": "Corporate Legal & Compliance", "sbuName": "SBU Corporate & Holding Services"},
+        {"code": "PRJ-LEG-002", "name": "Contract Governance & Cross-Border Compliance Review", "description": "Review tata kelola kontrak komersial dan regulasi hulu migas", "departmentCode": "DEPT-CHS-01", "departmentName": "Corporate Legal & Compliance", "sbuName": "SBU Corporate & Holding Services"},
+
+        # SBU Corporate & Holding Services - DEPT-CHS-02 Finance, Tax & Control
+        {"code": "PRJ-FIN-001", "name": "ERP Cost Allocation & Financial Modernization Project", "description": "Implementasi sistem otomatisasi alokasi biaya dan ERP Radiant", "departmentCode": "DEPT-CHS-02", "departmentName": "Finance, Tax & Control", "sbuName": "SBU Corporate & Holding Services"},
+        {"code": "PRJ-FIN-002", "name": "Annual Group Tax Restructuring & Transfer Pricing Review", "description": "Restrukturisasi perpajakan dan kajian transfer pricing grup", "departmentCode": "DEPT-CHS-02", "departmentName": "Finance, Tax & Control", "sbuName": "SBU Corporate & Holding Services"},
+
+        # SBU Corporate & Holding Services - DEPT-CHS-03 Human Capital & General Affairs
+        {"code": "PRJ-HCGA-001", "name": "Radiant Academy Competency & Leadership Development", "description": "Program pelatihan kepemimpinan dan sertifikasi kompetensi SDM", "departmentCode": "DEPT-CHS-03", "departmentName": "Human Capital & General Affairs", "sbuName": "SBU Corporate & Holding Services"},
+        {"code": "PRJ-HCGA-002", "name": "Head Office Facility Renovation & Energy Efficiency", "description": "Revitalisasi gedung kantor pusat dan konservasi energi", "departmentCode": "DEPT-CHS-03", "departmentName": "Human Capital & General Affairs", "sbuName": "SBU Corporate & Holding Services"},
+
+        # SBU Corporate & Holding Services - DEPT-CHS-04 Information Technology (IT)
+        {"code": "PRJ-IT-001", "name": "Enterprise Cybersecurity & SOC Enhancement", "description": "Peningkatan pusat komando keamanan siber dan perlindungan data", "departmentCode": "DEPT-CHS-04", "departmentName": "Information Technology (IT)", "sbuName": "SBU Corporate & Holding Services"},
+        {"code": "PRJ-IT-002", "name": "Cloud Infrastructure & Disaster Recovery Expansion", "description": "Migrasi infrastruktur cloud dan sistem pemulihan bencana", "departmentCode": "DEPT-CHS-04", "departmentName": "Information Technology (IT)", "sbuName": "SBU Corporate & Holding Services"},
+
+        # SBU Trading & Agency - DEPT-TRA-01 Commercial & Business Development
+        {"code": "PRJ-CBD-001", "name": "East Kalimantan Gas Exploration Commercial Bidding", "description": "Tender komersial eksplorasi gas wilayah Kalimantan Timur", "departmentCode": "DEPT-TRA-01", "departmentName": "Commercial & Business Development", "sbuName": "SBU Trading & Agency"},
+        {"code": "PRJ-CBD-002", "name": "Renewable Geothermal Joint Venture Feasibility Study", "description": "Studi kelayakan kemitraan bisnis energi panas bumi", "departmentCode": "DEPT-TRA-01", "departmentName": "Commercial & Business Development", "sbuName": "SBU Trading & Agency"},
+
+        # SBU Trading & Agency - DEPT-TRA-02 Trading & Agency Operations
+        {"code": "PRJ-TRA-001", "name": "Heavy Machinery & Specialty Valves Agency Contract", "description": "Keagenan dan distribusi katup tekanan tinggi untuk kilang", "departmentCode": "DEPT-TRA-02", "departmentName": "Trading & Agency Operations", "sbuName": "SBU Trading & Agency"},
+        {"code": "PRJ-TRA-002", "name": "Chemical Treatment Supplies Distribution 2026", "description": "Penyaluran bahan kimia pengolahan lumpur pemboran", "departmentCode": "DEPT-TRA-02", "departmentName": "Trading & Agency Operations", "sbuName": "SBU Trading & Agency"},
+
+        # SBU Inspection & Certification - DEPT-INC-01 Technical Inspection & Engineering
+        {"code": "PRJ-INC-001", "name": "Non-Destructive Testing (NDT) Balikpapan Refinery", "description": "Inspeksi NDT pada instalasi pipa dan tangki kilang minyak", "departmentCode": "DEPT-INC-01", "departmentName": "Technical Inspection & Engineering", "sbuName": "SBU Inspection & Certification"},
+        {"code": "PRJ-INC-002", "name": "Offshore Crane & Lifting Equipment Rigorous Certification", "description": "Sertifikasi keselamatan crane dan alat angkat lepas pantai", "departmentCode": "DEPT-INC-01", "departmentName": "Technical Inspection & Engineering", "sbuName": "SBU Inspection & Certification"},
+
+        # SBU Inspection & Certification - DEPT-INC-02 Quality Assurance & Certification
+        {"code": "PRJ-QAC-001", "name": "ASME Boiler & Pressure Vessel Statutory Certification", "description": "Inspeksi berkala bejana tekan dan ketel uap berstandar ASME", "departmentCode": "DEPT-INC-02", "departmentName": "Quality Assurance & Certification", "sbuName": "SBU Inspection & Certification"},
+        {"code": "PRJ-QAC-002", "name": "Third-Party Welding Inspector QA Verification Services", "description": "Verifikasi mutu pengelasan dan inspeksi pihak ketiga independen", "departmentCode": "DEPT-INC-02", "departmentName": "Quality Assurance & Certification", "sbuName": "SBU Inspection & Certification"},
+    ]
+
+    def get_project_codes(self, department_id=None, department_name=None, sbu=None, query=None):
+        items = list(self.PROJECT_CODES)
+        dept = (department_id or department_name or "").strip().lower()
+        if dept:
+            items = [
+                p for p in items
+                if dept == p.get("departmentCode", "").lower()
+                or dept == p.get("departmentName", "").lower()
+                or dept in p.get("departmentName", "").lower()
+                or p.get("departmentCode", "").lower() in dept
+            ]
+        if sbu and sbu.strip():
+            items = [p for p in items if sbu.strip().lower() in p.get("sbuName", "").lower()]
+        if query and query.strip():
+            q = query.strip().lower()
+            items = [
+                p for p in items
+                if q in p["code"].lower()
+                or q in p["name"].lower()
+                or q in p.get("description", "").lower()
+            ]
+        return items
+
+    def get_cost_controls(self, sbu=None, query=None):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        sql = "SELECT * FROM employees WHERE (position_name LIKE '%PCC%' OR position_id LIKE '%PCC%')"
+        params = []
+        if sbu and sbu.strip():
+            sql += " AND (LOWER(organization_name) = ? OR LOWER(organization_name) LIKE ?)"
+            params.extend([sbu.strip().lower(), f"%{sbu.strip().lower()}%"])
+        if query and query.strip():
+            q = f"%{query.strip().lower()}%"
+            sql += " AND (LOWER(full_name) LIKE ? OR LOWER(employee_number) LIKE ? OR LOWER(department) LIKE ?)"
+            params.extend([q, q, q])
+        sql += " ORDER BY full_name ASC"
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        conn.close()
+
+        result = []
+        for r in rows:
+            d = dict(r)
+            sbu_val = d["organization_name"] if "SBU" in (d.get("organization_name") or "") else (sbu or "SBU Energy & Offshore Services")
+            result.append({
+                "employeeId": d["id"],
+                "employeeNumber": d["employee_number"],
+                "fullName": d["full_name"],
+                "email": d["email"],
+                "positionId": d["position_id"],
+                "positionName": d["position_name"],
+                "entityName": d["entity_name"],
+                "sbuName": sbu_val,
+                "department": d["department"],
+            })
+        return result
 
     def save_declaration(self, decl_data):
         conn = self.get_connection()
@@ -464,6 +596,32 @@ class HRISDatabaseManager:
                 "reviewedBy": d["reviewed_by"],
             })
         return result
+
+    def get_declaration_by_id(self, decl_id):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM declarations WHERE id = ? OR declaration_number = ?", (decl_id, decl_id))
+        r = cursor.fetchone()
+        conn.close()
+        if not r:
+            return None
+        d = dict(r)
+        return {
+            "id": d["id"],
+            "declarationNumber": d["declaration_number"],
+            "expenseNumber": d["expense_number"],
+            "status": d["status"],
+            "documentCode": d["document_code"],
+            "identity": json.loads(d["identity_json"]) if d["identity_json"] else {},
+            "externalParty": json.loads(d["external_party_json"]) if d["external_party_json"] else {},
+            "activityDetail": json.loads(d["activity_detail_json"]) if d["activity_detail_json"] else {},
+            "attachments": json.loads(d["attachments_json"]) if d["attachments_json"] else [],
+            "declarationAccepted": bool(d["declaration_accepted"]),
+            "createdDate": d["created_date"],
+            "submittedDate": d["submitted_date"],
+            "reviewedDate": d["reviewed_date"] if "reviewed_date" in d else None,
+            "reviewedBy": d["reviewed_by"] if "reviewed_by" in d else None,
+        }
 
     # --- 1. HRIS Sync & Organization Structure Methods ---
     def sync_hris_data(self, synced_by="System Admin"):
